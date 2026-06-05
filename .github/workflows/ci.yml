@@ -1,0 +1,46 @@
+name: Quality
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 11.3.0
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Unit and component tests
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build
+
+      - name: E2E and contrast tests
+        run: pnpm test:e2e
+
+      - name: Build Storybook
+        run: pnpm build-storybook

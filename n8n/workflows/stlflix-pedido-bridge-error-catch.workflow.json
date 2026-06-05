@@ -1,0 +1,42 @@
+{
+  "name": "STLFLIX Pedido Bridge - Error Catch",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "99f31cef-33ce-4057-8a21-b1f8ef85f9c6",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "const error = $json;\nreturn [{\n  json: {\n    status: 500,\n    message: 'Falha interna no processamento do pedido.',\n    workflow: error.workflow?.name ?? 'STLFLIX Pedido Bridge',\n    executionId: error.execution?.id ?? null,\n    lastNode: error.execution?.lastNodeExecuted ?? null\n  }\n}];"
+      },
+      "id": "da685ce9-2488-4ec7-adc1-6183982ec5f4",
+      "name": "Normalize Runtime Error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [260, 0]
+    }
+  ],
+  "connections": {
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Normalize Runtime Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "versionId": "1",
+  "tags": ["stlflix", "error-catch"]
+}

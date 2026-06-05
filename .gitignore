@@ -1,0 +1,13 @@
+.next
+out
+node_modules
+storybook-static
+coverage
+reports
+playwright-report
+test-results
+.env
+.env*.local
+*.tsbuildinfo
+.DS_Store
+.vercel

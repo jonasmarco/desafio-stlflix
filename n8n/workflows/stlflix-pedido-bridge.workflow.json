@@ -1,0 +1,260 @@
+{
+  "name": "STLFLIX Pedido Bridge",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "stlflix-pedido",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "id": "6e36a7fb-7c41-43bb-8b43-8cf68f1a5b1c",
+      "name": "Webhook Entrada",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [0, 160],
+      "webhookId": "stlflix-pedido"
+    },
+    {
+      "parameters": {
+        "jsCode": "const source = $json.body ?? $json;\nconst required = ['nome', 'telefone', 'produto', 'cep', 'imagemBase64'];\nconst missing = required.filter((field) => !source[field]);\nconst cep = String(source.cep ?? '').replace(/\\D/g, '');\nconst telefone = String(source.telefone ?? '').replace(/\\D/g, '');\nconst imagemBase64 = String(source.imagemBase64 ?? '');\nconst isImage = /^data:image\\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/u.test(imagemBase64) || /^[A-Za-z0-9+/]+={0,2}$/u.test(imagemBase64);\n\nif (missing.length > 0) {\n  return [{ json: { status: 400, isValid: false, message: `Campos obrigatórios ausentes: ${missing.join(', ')}.` } }];\n}\n\nif (cep.length !== 8) {\n  return [{ json: { status: 400, isValid: false, message: 'CEP inválido. Envie 8 dígitos.' } }];\n}\n\nif (![10, 11].includes(telefone.length)) {\n  return [{ json: { status: 400, isValid: false, message: 'Telefone inválido. Envie DDD e número.' } }];\n}\n\nif (!isImage) {\n  return [{ json: { status: 400, isValid: false, message: 'Imagem em Base64 inválida.' } }];\n}\n\nreturn [{\n  json: {\n    status: 200,\n    isValid: true,\n    payload: {\n      nome: String(source.nome).trim(),\n      telefone,\n      produto: String(source.produto),\n      cep,\n      imagemBase64\n    }\n  }\n}];"
+      },
+      "id": "e6aa0792-6e82-41f9-b26b-c33f607513ce",
+      "name": "Validate Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [260, 160]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "conditions": [
+            {
+              "leftValue": "={{ $json.isValid }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "2bb7f4d3-b1f6-48f9-bbb6-3ac6ec3f8b80",
+      "name": "Payload Is Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [520, 160]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { status: 400, message: $json.message } }}",
+        "options": {
+          "responseCode": 400
+        }
+      },
+      "id": "db8af6fe-29bc-4dfd-8e95-4a6776e78b8a",
+      "name": "Respond Invalid Data",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [790, 320]
+    },
+    {
+      "parameters": {
+        "url": "={{ 'https://viacep.com.br/ws/' + $json.payload.cep + '/json/' }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 10000
+        }
+      },
+      "id": "5afcb864-363d-44a0-b26b-0e196c8873e1",
+      "name": "ViaCEP Lookup",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [790, 80],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "try {\n  const viaCep = $json;\n\n  if (!viaCep || viaCep.erro || !viaCep.localidade || !viaCep.uf) {\n    return [{ json: { status: 422, isCepValid: false, message: \"CEP invalido ou nao encontrado.\" } }];\n  }\n\n  const payload = $(\"Validate Payload\").first().json.payload;\n\n  return [{\n    json: {\n      status: 200,\n      isCepValid: true,\n      payload,\n      localidade: {\n        cidade: viaCep.localidade,\n        estado: viaCep.uf,\n        bairro: viaCep.bairro || \"\",\n        logradouro: viaCep.logradouro || \"\"\n      }\n    }\n  }];\n} catch (err) {\n  return [{ json: { status: 422, isCepValid: false, message: \"CEP invalido: \" + String(err.message) } }];\n}"
+      },
+      "id": "d20fdb0c-d10a-4748-b80c-ece46a3f4ec1",
+      "name": "Normalize ViaCEP",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1050, 80]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "conditions": [
+            {
+              "leftValue": "={{ $json.isCepValid }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "fd3dde70-d5a3-4ba4-8e82-660205318dd8",
+      "name": "CEP Found?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [1310, 80]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { status: 422, message: $json.message } }}",
+        "options": {
+          "responseCode": 422
+        }
+      },
+      "id": "92d2a2ed-6c31-4949-9457-0b5adf6d84c4",
+      "name": "Respond CEP Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [1570, 250]
+    },
+    {
+      "parameters": {
+        "jsCode": "const suffix = Math.floor(Math.random() * 1_000_000).toString().padStart(6, '0');\nconst now = new Date();\nconst pedido = {\n  numero: `STL-${now.getFullYear()}-${suffix}`,\n  cliente: {\n    nome: $json.payload.nome,\n    telefone: $json.payload.telefone,\n    cep: $json.payload.cep\n  },\n  produto: $json.payload.produto,\n  localidade: $json.localidade,\n  imagem: {\n    encoding: 'base64',\n    length: $json.payload.imagemBase64.length\n  },\n  criadoEm: now.toISOString()\n};\n\nreturn [{\n  json: {\n    status: 201,\n    message: 'Pedido recebido com sucesso',\n    pedido,\n    executionId: $execution.id\n  }\n}];"
+      },
+      "id": "d04fe7f9-3b38-409f-b1f7-30d027934e0d",
+      "name": "Generate Order",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1570, 60]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": 201
+        }
+      },
+      "id": "72feee09-f775-44f5-a029-b68c89f32a97",
+      "name": "Respond Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [1810, 60]
+    }
+  ],
+  "connections": {
+    "Webhook Entrada": {
+      "main": [
+        [
+          {
+            "node": "Validate Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Payload": {
+      "main": [
+        [
+          {
+            "node": "Payload Is Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Payload Is Valid?": {
+      "main": [
+        [
+          {
+            "node": "ViaCEP Lookup",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Invalid Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ViaCEP Lookup": {
+      "main": [
+        [
+          {
+            "node": "Normalize ViaCEP",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize ViaCEP": {
+      "main": [
+        [
+          {
+            "node": "CEP Found?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CEP Found?": {
+      "main": [
+        [
+          {
+            "node": "Generate Order",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond CEP Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Order": {
+      "main": [
+        [
+          {
+            "node": "Respond Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "versionId": "1",
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "tags": ["stlflix", "frontend", "automation"]
+}
